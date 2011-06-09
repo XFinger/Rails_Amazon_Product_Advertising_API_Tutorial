@@ -1,0 +1,175 @@
+h2. Using Rails with the Amazon product advertising API
+
+p. This tutorial will help you get started using the "Amazon product advertising API":https://affiliate-program.amazon.com/gp/advertising/api/detail/main.html in your Rails application. For each keyword or phrase, you can retrieve product listings from the Amazon marketplace and display them on your website. The listings in this tutorial include: the products title, URL, image and the price. You can add more product information such as product descriptions or reviews. To find out more, take a look at the "Docs":http://aws.amazon.com/archives/Product-Advertising-API/4044124515194371 .
+
+h3. Get Started
+
+p. Sign up for "Amazon Web Services(aws)":http://aws.amazon.com 
+Sign in to the AWS management Console and get your Amazon credentials *AWS Access Key ID* and *AWS Secret Access Key*
+
+p. Create a new file in config/initializers, named *amazon.rb* and add this line 
+
+bq.  ENV['AMAZONRCDIR'] = "#{RAILS_ROOT}/config/"
+
+p. Create a new file in config, named *.amazonrc* and add your Amazon credentials
+
+bq.  associate = 'your associate name'
+email = 'your email account'
+password = 'your password'
+cache = true
+key_id = 'your key id'
+secret_key_id = 'your secret key id'
+locale = 'us'
+encoding = 'iso-8859-15'
+style = 'xml'
+
+p. Create a migration file for your items object
+
+bq. script/generate scaffold Item name:string flag:boolean
+
+p. Edit your migration, adding a default value of false to the flag column
+
+pre. class CreateItems < ActiveRecord::Migration
+  def self.up
+    create_table :items do |t|
+      t.string :name
+      t.boolean :flag,  :default => false
+      t.timestamps
+    end
+  end
+  def self.down
+    drop_table :items
+  end
+end
+
+p. Rake your migration
+
+bq. rake db:migrate
+
+p. Install the ruby-aaws gem
+
+bq. gem install ruby-aaws
+
+h4. items_controller.rb
+
+p. At the top of your controller add
+
+bq. require 'amazon/aws'
+require 'amazon/aws/search'   
+include Amazon::AWS
+include Amazon::AWS::Search  
+
+p. Amazon throws an error if no products are available for the item or if its given an odd string. To avoid the error we will add a filter that checks the item with Amazon after it is created or updated. If Amazon returns an error, the item.flag is set to _true_ and we wont try to get products from Amazon based on that item.
+
+pre. after_filter :check_with_amazon, :only => [:create, :update]
+def check_with_amazon   
+   @check=@item.name
+    begin
+      is = ItemSearch.new( 'All', { 'Keywords' => @check } )
+      rg = ResponseGroup.new( 'Medium' )
+      req = Request.new
+      req.locale = 'us'
+      resp = req.search( is, rg ) 
+      items = resp.item_search_response.items.item   
+    rescue  
+      if Amazon::AWS::Error 
+        @item.flag = 'true'
+        @item.save
+      end  
+    end         
+end
+
+p. Reset your flag to false in the update method
+
+bq. @item.flag = false
+@item.save
+
+h4. items_helper.rb
+
+p. Set up a helper method *ad_builder.rb*. This will handle the heavy lifting, getting product results from Amazon and putting them into an array *@amazon_list*. Here is the entire module:
+
+pre. module ItemsHelper
+  require 'amazon/aws'
+  require 'amazon/aws/search'
+  include Amazon::AWS
+  include Amazon::AWS::Search
+ def ad_builder(lookup_item)
+    is = ItemSearch.new( 'All', { 'Keywords' => lookup_item } )
+    rg = ResponseGroup.new( 'Medium' )
+    req = Request.new
+    req.locale = 'us'
+    resp = req.search( is, rg ) 
+    amaz_items = resp.item_search_response.items.item
+    @amazon_list = []  
+    @attrib_group = {}      
+      amaz_items.each do |item|
+        attribs = item.item_attributes
+        unless attribs.list_price.nil? 
+          unless item.small_image.nil?
+          @attrib_group ={
+            'title' => attribs.title,
+            'price' => attribs.list_price.formatted_price,
+            'url' => item.detail_page_url,
+            'pic' => item.small_image.url  
+           }
+          @amazon_list  << @attrib_group
+          end
+        end
+      end  
+  end
+end
+
+h4. The Views
+
+h4. show.html.erb
+
+p. This checks the flag on your item name and passes it to the helper method *ad_builder* which returns an array (@amazon_list) containing your Amazon product results.
+
+pre. <%=h @item.name %> 
+<% if @item.flag == false  %>
+    <% ad_builder(@item.name)%>	
+	<% @amazon_list.each do |t| %>
+	    <div> 			 
+		<img src="<%= t['pic']%>" > 		 		 
+		<%= link_to t['title'], t['url'].to_s %>		 		 
+		<%= t['price']%>  	
+	    </div>  
+	<%end%>	
+<%end%>	
+
+h4. index.html.erb
+
+pre.  <% @items.each do |l| %>
+  <%=h l.name %> 
+    <% if l.flag == false  %>
+ 	 <% ad_builder(l.name)%>	
+	 <% @amazon_list.each do |t| %>
+		<div>
+		   <img src="<%= t['pic']%>" > 
+		   <%= link_to t['title'], t['url'].to_s %>
+		   <%= t['price']%>
+ 		 </div>  
+	 <%end%>	
+    <%end%>	
+<br>
+<hr>
+<% end %>
+
+h3. Caching
+
+p. Amazon's "efficiency guidelines":https://affiliate-program.amazon.com/gp/advertising/api/detail/main.html puts a limit of 2,000 requests per hour, so it's a good idea to cache your amazon results. Amazon also requires that any cached item must be refreshed within 24 hours. Lucky for us, the ruby-aws gem checks the age of the cached item and refreshes it if it has expired. "Railscasts":http://railscasts.com/episodes/115-caching-in-rails-2-1 has an excellent overview of caching in rails.
+
+p. One method for setting rails cache is to edit your environmental file in *config/environments/*, setting the following lines to true.
+
+bq. config.cache_classes = true
+config.action_controller.perform_caching = true
+
+p. That's it, fire up your server and test it out.
+
+h2. Relevant Links
+
+* "Amazon product advertising API":https://affiliate-program.amazon.com/gp/advertising/api/detail/main.html
+* "Amazon Web Services(aws) Sign Up":http://aws.amazon.com 
+* "Amazon Product Advertising Docs":http://aws.amazon.com/archives/Product-Advertising-API/4044124515194371
+* "ruby-aws Docs":http://www.caliban.org/ruby/ruby-aws/
+* "Railscasts - Caching in Rails"::http://railscasts.com/episodes/115-caching-in-rails-2-1  

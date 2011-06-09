@@ -1,0 +1,9 @@
+     associate = 'stillindeve01-20'
+     email = 'your email'
+     password = 'your password'
+     cache = true
+     key_id = 'your key'
+     secret_key_id = 'your secret_key_id'
+  	 locale = 'us'
+  	 encoding = 'iso-8859-15'
+  	 style = 'xml'

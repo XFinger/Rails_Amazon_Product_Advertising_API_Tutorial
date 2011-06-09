@@ -1,0 +1,22 @@
+ 
+
+<p>
+	<b> <%=h @item.name %></b>
+</p>
+<%if @item.flag == false  %>
+	<% ad_builder(@item.name)%>	
+	<% @amazon_list.each do |t| %>
+		<div> 			 
+			<img src="<%= t['pic']%>" > 		 		 
+			<%= link_to t['title'], t['url'].to_s %>		 		 
+			<%= t['price']%>  	
+		</div>  
+	<%end%>	
+<%end%>	
+
+
+<p>
+  <%= link_to "Edit", edit_item_path(@item) %> |
+  <%= link_to "Destroy", @item, :confirm => 'Are you sure?', :method => :delete %> |
+  <%= link_to "View All", items_path %>
+</p>

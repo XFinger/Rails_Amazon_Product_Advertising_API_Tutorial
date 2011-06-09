@@ -1,0 +1,1 @@
+    ENV['AMAZONRCDIR'] = "#{RAILS_ROOT}/config/"
